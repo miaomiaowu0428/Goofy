@@ -1,44 +1,86 @@
-#![allow(unused_imports)]
 #![allow(unused)]
 #![allow(non_snake_case)]
 
-use std::{env, fs};
+use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::process::Command;
-use std::ptr::read;
+use std::process::Command as stdCommand;
 
-use inkwell::context::Context;
+use clap::{arg, ArgMatches, Command as clapCommand, Parser as clapParser};
 use colored::Colorize;
+use inkwell::context::Context;
 
 use Qmmc;
 use Qmmc::analyze::lex::Lexer;
-use Qmmc::analyze::parse::{Expression, Parser};
-use Qmmc::compile::{CheckedExpression, Compiler};
+use Qmmc::analyze::parse::Parser;
+use Qmmc::compile::Compiler;
 use Qmmc::IR_building::IRBuilder;
 
+static INTRODUCTION: &str =
+    "Goofy is a simple CLI tool to build your project written in Qmm language";
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 4 {
-        println!("Usage: {} [build|run] <file_name> <target>", args[0]);
-        return;
+    let matches = clapCommand::new("Goofy")
+        .version("version 0.0.1b")
+        .author("Qmm")
+        .about(INTRODUCTION)
+        .long_about(INTRODUCTION)
+        .subcommands([
+            clapCommand::new("build").about("Compile the source file")
+                .arg(
+                    arg!([source])
+                        .value_parser(clap::value_parser!(String))
+                        .required(true)
+                        .help("Path to the source file to compile or run"),
+                )
+                .arg(
+                    arg!([output])
+                        .value_parser(clap::value_parser!(String))
+                        .required(true)
+                        .help("Output file name"),
+                ),
+            clapCommand::new("run").about("Compile and Run the source file")
+                .arg(
+                    arg!([source])
+                        .value_parser(clap::value_parser!(String))
+                        .required(true)
+                        .help("Path to the source file to compile or run"),
+                )
+                .arg(
+                    arg!([output])
+                        .value_parser(clap::value_parser!(String))
+                        .required(true)
+                        .help("Output file name"),
+                ),
+        ])
+
+        .get_matches();
+    match matches.subcommand() {
+        Some(("build", build_command)) => {
+            let source = build_command.get_one::<String>("source").unwrap();
+            let output = build_command.get_one::<String>("output").unwrap();
+            compile(&source, &output);
+        }
+        Some(("run", run_command)) => {
+            let source = run_command.get_one::<String>("source").unwrap();
+            let output = run_command.get_one::<String>("output").unwrap();
+            compile(&source, &output);
+            run(&output);
+        }
+        _ => {
+            println!("No subcommand provided");
+        }
     }
-    let command = &args[1];
-    let FILE_NAME = &args[2];
-    let RES_PATH = &args[3];
+}
 
-
-    let mut file = File::open(Path::new(FILE_NAME))
-        .expect("Could not open file");
+fn compile(source_file_name: &str, res_file_name: &str) {
+    let mut file = File::open(Path::new(source_file_name)).expect("Could not open file");
     let mut contents = String::new();
     file.read_to_string(&mut contents)
         .expect("Could not read file");
     let lexer = Lexer::new(&contents);
     let tokens = lexer.lex();
-
-    // println!("Tokens: {:#?}", tokens);
 
     let syntax_tree = Parser::new(tokens);
     let expressions = syntax_tree.parse();
@@ -46,14 +88,9 @@ fn main() {
         println!("Syntax Errors: ");
         syntax_tree.diagnostics.print();
         println!("==============================");
+        return;
     }
 
-    // show_input(&expressions);
-
-    compile(command, expressions, FILE_NAME, RES_PATH);
-}
-
-fn compile(command: &str, expressions: Vec<Expression>, source_file_name: &str, res_file_name: &str) {
     let compiler = Compiler::new();
     let checked_expressions = compiler.analyse(expressions);
 
@@ -78,7 +115,7 @@ fn compile(command: &str, expressions: Vec<Expression>, source_file_name: &str, 
             let llc_source = format!("{}{}", res_file_name, ".ll");
             ir_builder.save_as(&llc_source);
 
-            let llc_output = Command::new("llc")
+            let llc_output = stdCommand::new("llc")
                 .arg(llc_source.clone())
                 .output()
                 .expect("Failed to execute llc command");
@@ -97,7 +134,7 @@ fn compile(command: &str, expressions: Vec<Expression>, source_file_name: &str, 
                 );
             }
 
-            let clang_output = Command::new("clang")
+            let clang_output = stdCommand::new("clang")
                 .arg(clang_source.clone())
                 .arg("-o")
                 .arg(res_file_name)
@@ -127,35 +164,15 @@ fn compile(command: &str, expressions: Vec<Expression>, source_file_name: &str, 
                 println!("Failed to compile to {}", res_file_name);
                 return;
             }
-
-            if command == "run" {
-                println!("\n\nRunning: {}", res_file_name);
-                let output = Command::new(res_file_name)
-                    .output()
-                    .expect("Failed to execute command");
-                let exit_code = output.status.code().unwrap();
-
-                println!("Exit Code of {}(): {}\n\n", res_file_name, exit_code);
-            }
         }
     }
 }
 
-fn show_input(expressions: &Vec<Expression>) {
-    println!("Input Expressions: ");
-    for expression in expressions {
-        println!("{}", expression)
-    }
-    println!("==============================");
-}
+fn run(target_file_name: &str) {
+    let output = stdCommand::new(target_file_name)
+        .output()
+        .expect("Failed to execute command");
+    let exit_code = output.status.code().unwrap();
 
-fn show_static_scope(static_analyzer: &Compiler) {
-    println!("\n\nScope:\n{:#?}", static_analyzer.scope);
-}
-
-fn show_ByteCode(checked_expressions: &Vec<CheckedExpression>) {
-    println!("\n\nByteCode:");
-    for expression in checked_expressions {
-        println!("{:#?}", expression);
-    }
+    println!("Exit Code of {}(): {}\n\n", target_file_name, exit_code);
 }
