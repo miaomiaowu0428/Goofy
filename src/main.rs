@@ -3,9 +3,10 @@
 
 use std::fs;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command as stdCommand;
+use std::ptr::eq;
 
 use clap::{arg, ArgMatches, Command as clapCommand, Parser as clapParser};
 use colored::Colorize;
@@ -18,7 +19,8 @@ use Qmmc::compile::Compiler;
 use Qmmc::IR_building::IRBuilder;
 
 static INTRODUCTION: &str =
-    "Goofy is a simple CLI tool to build your project written in Qmm language";
+    "Goofy is a simple CLI tool to build your project written in Qmm-lang.\n\
+    to use Goofy, you need to make sure that you have installed the LLVM and Clang on your machine.";
 
 fn main() {
     let matches = clapCommand::new("Goofy")
@@ -27,12 +29,16 @@ fn main() {
         .about(INTRODUCTION)
         .long_about(INTRODUCTION)
         .subcommands([
-            clapCommand::new("build").about("Compile the source file")
+            clapCommand::new("build")
+                .version("0.0.1b")
+                .author("Qmm")
+                .about("Compile the source file")
+                .long_about("Compile the source file")
                 .arg(
                     arg!([source])
                         .value_parser(clap::value_parser!(String))
                         .required(true)
-                        .help("Path to the source file to compile or run"),
+                        .help("Path to the source file"),
                 )
                 .arg(
                     arg!([output])
@@ -40,22 +46,37 @@ fn main() {
                         .required(true)
                         .help("Output file name"),
                 ),
-            clapCommand::new("run").about("Compile and Run the source file")
+            clapCommand::new("run")
+                .version("0.0.1b")
+                .author("Qmm")
+                .about("Compile and Run the source file")
+                .long_about("Compile and Run the source file")
                 .arg(
                     arg!([source])
                         .value_parser(clap::value_parser!(String))
                         .required(true)
-                        .help("Path to the source file to compile or run"),
+                        .help("Path to the source file"),
                 )
                 .arg(
                     arg!([output])
                         .value_parser(clap::value_parser!(String))
                         .required(true)
                         .help("Output file name"),
+                ),
+            clapCommand::new("new")
+                .version("0.0.1b")
+                .author("Qmm")
+                .about("Create a new project")
+                .long_about("Create a new project")
+                .arg(
+                    arg!([name])
+                        .value_parser(clap::value_parser!(String))
+                        .required(true)
+                        .help("Name of the project"),
                 ),
         ])
-
         .get_matches();
+
     match matches.subcommand() {
         Some(("build", build_command)) => {
             let source = build_command.get_one::<String>("source").unwrap();
@@ -68,10 +89,41 @@ fn main() {
             compile(&source, &output);
             run(&output);
         }
+        Some(("new", new_command)) => {
+            let name = new_command.get_one::<String>("name").unwrap();
+            creat_project(&name);
+        }
         _ => {
             println!("No subcommand provided");
         }
     }
+}
+
+fn creat_project(name: &str) {
+    // 新建项目目录
+    let project_dir = format!("./{}", name);
+    fs::create_dir(&project_dir).expect("Failed to create project directory");
+
+    // 新建src目录
+    let src_dir = format!("{}/src", project_dir);
+    fs::create_dir(src_dir).expect("Failed to create src directory");
+
+    // 新建main.qmm文件
+    let source_file = format!("{}/src/main.qmm", project_dir);
+    let mut file = File::create(&source_file).expect("Failed to create source file");
+    file.write_all(b"fun main() {\n    \n}\n")
+        .expect("Failed to write to source file");
+
+    // 新建Goofy.toml文件
+    let mut toml_file = File::create(format!("{}/Goofy.toml", project_dir))
+        .expect("Failed to create Goofy.toml file");
+    toml_file.write_all(
+        format!(
+            "[package]\n name = \"{}\"\n version = \"0.0.1\"\n",
+            name
+        ).as_bytes()
+    ).expect("Failed to write to Goofy.toml file");
+    println!("Project {} created successfully", name);
 }
 
 fn compile(source_file_name: &str, res_file_name: &str) {
