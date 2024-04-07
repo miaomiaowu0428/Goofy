@@ -13,12 +13,12 @@ use colored::Colorize;
 use inkwell::context::Context;
 use Goofy_toml::Package;
 
+use crate::Goofy_toml::GoofyToml;
 use Qmmc;
 use Qmmc::analyze::lex::Lexer;
 use Qmmc::analyze::parse::Parser;
 use Qmmc::compile::Compiler;
 use Qmmc::IR_building::IRBuilder;
-use crate::Goofy_toml::GoofyToml;
 
 mod Goofy_toml;
 
@@ -229,7 +229,7 @@ fn compile(source_file_name: &str, res_file_name: &str) {
     }
 }
 
-fn create_target_release_dir(){
+fn create_target_release_dir() {
     let target_dir = "target";
     let release_dir = "release";
     let target_release_dir = format!("{}/{}", target_dir, release_dir);
@@ -243,35 +243,33 @@ fn create_target_release_dir(){
 
 fn run_with_Goofy_toml_file() {
     match fs::read_to_string("Goofy.toml") {
-        Ok(toml_str) => {
-            match toml::from_str(&toml_str) {
-                Ok(Goofy_toml) => {
-                    let Goofy_toml: GoofyToml = Goofy_toml;
-                    println!("Package Name: {}", Goofy_toml.package.name);
-                    println!("Package Version: {}", Goofy_toml.package.version);
-                    create_target_release_dir();
-                    let target_path = format!("target/release/{}", Goofy_toml.package.name);
-                    compile("src/main.qmm", &*target_path);
-                    run(&*target_path);
-                }
-                Err(e) => {
-                    println!(
-                        "{}",
-                        format!(
-                            "{}:\n{} {} {} {} {} {} {} {} {}",
-                            "Goofy.toml broken".red(),
-                            "make sure your",
-                            "Goofy.toml".green(),
-                            "contains a",
-                            "[package]".green(),
-                            "label and it has a",
-                            "name".green(),
-                            "item and a",
-                            "version".green(),
-                            "item",
-                        )
-                    );
-                }
+        Ok(toml_str) => match toml::from_str(&toml_str) {
+            Ok(Goofy_toml) => {
+                let Goofy_toml: GoofyToml = Goofy_toml;
+                println!("Package Name: {}", Goofy_toml.package.name);
+                println!("Package Version: {}", Goofy_toml.package.version);
+                create_target_release_dir();
+                let target_path = format!("target/release/{}", Goofy_toml.package.name);
+                compile("src/main.qmm", &*target_path);
+                run(&*target_path);
+            }
+            Err(e) => {
+                println!(
+                    "{}",
+                    format!(
+                        "{}:\n{} {} {} {} {} {} {} {} {}",
+                        "Goofy.toml broken".red(),
+                        "make sure your",
+                        "Goofy.toml".green(),
+                        "contains a",
+                        "[package]".green(),
+                        "label and it has a",
+                        "name".green(),
+                        "item and a",
+                        "version".green(),
+                        "item",
+                    )
+                );
             }
         },
         Err(_) => {
