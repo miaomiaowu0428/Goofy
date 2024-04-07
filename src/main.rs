@@ -11,12 +11,16 @@ use std::ptr::eq;
 use clap::{arg, ArgMatches, Command as clapCommand, Parser as clapParser};
 use colored::Colorize;
 use inkwell::context::Context;
+use Goofy_toml::Package;
 
 use Qmmc;
 use Qmmc::analyze::lex::Lexer;
 use Qmmc::analyze::parse::Parser;
 use Qmmc::compile::Compiler;
 use Qmmc::IR_building::IRBuilder;
+use crate::Goofy_toml::GoofyToml;
+
+mod Goofy_toml;
 
 static INTRODUCTION: &str =
     "Goofy is a simple CLI tool to build your project written in Qmm-lang.\n\
@@ -74,6 +78,11 @@ fn main() {
                         .required(true)
                         .help("Name of the project"),
                 ),
+            clapCommand::new("test_toml")
+                .version("0.0.1b")
+                .author("Qmm")
+                .about("Test Goofy.toml file")
+                .long_about("Test Goofy.toml file"),
         ])
         .get_matches();
 
@@ -92,6 +101,9 @@ fn main() {
         Some(("new", new_command)) => {
             let name = new_command.get_one::<String>("name").unwrap();
             creat_project(&name);
+        }
+        Some(("test_toml", _)) => {
+            run_with_Goofy_toml_file();
         }
         _ => {
             println!("No subcommand provided");
@@ -117,12 +129,9 @@ fn creat_project(name: &str) {
     // 新建Goofy.toml文件
     let mut toml_file = File::create(format!("{}/Goofy.toml", project_dir))
         .expect("Failed to create Goofy.toml file");
-    toml_file.write_all(
-        format!(
-            "[package]\n name = \"{}\"\n version = \"0.0.1\"\n",
-            name
-        ).as_bytes()
-    ).expect("Failed to write to Goofy.toml file");
+    toml_file
+        .write_all(format!("[package]\n name = \"{}\"\n version = \"0.0.1\"\n", name).as_bytes())
+        .expect("Failed to write to Goofy.toml file");
     println!("Project {} created successfully", name);
 }
 
@@ -220,11 +229,65 @@ fn compile(source_file_name: &str, res_file_name: &str) {
     }
 }
 
+fn create_target_release_dir(){
+    let target_dir = "target";
+    let release_dir = "release";
+    let target_release_dir = format!("{}/{}", target_dir, release_dir);
+    if !Path::new(&target_dir).exists() {
+        fs::create_dir(&target_dir).expect("Failed to create target directory");
+    }
+    if !Path::new(&target_release_dir).exists() {
+        fs::create_dir(&target_release_dir).expect("Failed to create target/release directory");
+    }
+}
+
+fn run_with_Goofy_toml_file() {
+    match fs::read_to_string("Goofy.toml") {
+        Ok(toml_str) => {
+            match toml::from_str(&toml_str) {
+                Ok(Goofy_toml) => {
+                    let Goofy_toml: GoofyToml = Goofy_toml;
+                    println!("Package Name: {}", Goofy_toml.package.name);
+                    println!("Package Version: {}", Goofy_toml.package.version);
+                    create_target_release_dir();
+                    let target_path = format!("target/release/{}", Goofy_toml.package.name);
+                    compile("src/main.qmm", &*target_path);
+                    run(&*target_path);
+                }
+                Err(e) => {
+                    println!(
+                        "{}",
+                        format!(
+                            "{}:\n{} {} {} {} {} {} {} {} {}",
+                            "Goofy.toml broken".red(),
+                            "make sure your",
+                            "Goofy.toml".green(),
+                            "contains a",
+                            "[package]".green(),
+                            "label and it has a",
+                            "name".green(),
+                            "item and a",
+                            "version".green(),
+                            "item",
+                        )
+                    );
+                }
+            }
+        },
+        Err(_) => {
+            println!(
+                "{}",
+                format!("{}{}", "run failed: ".red(), "Goofy.toml not found")
+            );
+        }
+    }
+}
+
 fn run(target_file_name: &str) {
     let output = stdCommand::new(target_file_name)
         .output()
         .expect("Failed to execute command");
     let exit_code = output.status.code().unwrap();
 
-    println!("Exit Code of {}(): {}\n\n", target_file_name, exit_code);
+    println!("\nExit Code of {}: {}\n\n", target_file_name, exit_code);
 }
