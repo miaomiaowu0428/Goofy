@@ -6,13 +6,9 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command as stdCommand;
-use std::ptr::eq;
-
-use clap::{arg, ArgMatches, Command as clapCommand, Parser as clapParser};
+use clap::{arg, Command as clapCommand, Parser as clapParser};
 use colored::Colorize;
 use inkwell::context::Context;
-use Goofy_toml::Package;
-
 use crate::Goofy_toml::GoofyToml;
 use Qmmc;
 use Qmmc::analyze::lex::Lexer;
@@ -33,40 +29,6 @@ fn main() {
         .about(INTRODUCTION)
         .long_about(INTRODUCTION)
         .subcommands([
-            clapCommand::new("build")
-                .version("0.0.1b")
-                .author("Qmm")
-                .about("Compile the source file")
-                .long_about("Compile the source file")
-                .arg(
-                    arg!([source])
-                        .value_parser(clap::value_parser!(String))
-                        .required(true)
-                        .help("Path to the source file"),
-                )
-                .arg(
-                    arg!([output])
-                        .value_parser(clap::value_parser!(String))
-                        .required(true)
-                        .help("Output file name"),
-                ),
-            clapCommand::new("run")
-                .version("0.0.1b")
-                .author("Qmm")
-                .about("Compile and Run the source file")
-                .long_about("Compile and Run the source file")
-                .arg(
-                    arg!([source])
-                        .value_parser(clap::value_parser!(String))
-                        .required(true)
-                        .help("Path to the source file"),
-                )
-                .arg(
-                    arg!([output])
-                        .value_parser(clap::value_parser!(String))
-                        .required(true)
-                        .help("Output file name"),
-                ),
             clapCommand::new("new")
                 .version("0.0.1b")
                 .author("Qmm")
@@ -78,31 +40,28 @@ fn main() {
                         .required(true)
                         .help("Name of the project"),
                 ),
-            clapCommand::new("test_toml")
+            clapCommand::new("run")
                 .version("0.0.1b")
                 .author("Qmm")
                 .about("Test Goofy.toml file")
                 .long_about("Test Goofy.toml file"),
+            clapCommand::new("build")
+                .version("0.0.1b")
+                .author("Qmm")
+                .about("Build project with Goofy.toml file")
+                .long_about("Build project with Goofy.toml file"),
         ])
         .get_matches();
 
     match matches.subcommand() {
-        Some(("build", build_command)) => {
-            let source = build_command.get_one::<String>("source").unwrap();
-            let output = build_command.get_one::<String>("output").unwrap();
-            compile(&source, &output);
-        }
-        Some(("run", run_command)) => {
-            let source = run_command.get_one::<String>("source").unwrap();
-            let output = run_command.get_one::<String>("output").unwrap();
-            compile(&source, &output);
-            run(&output);
-        }
         Some(("new", new_command)) => {
             let name = new_command.get_one::<String>("name").unwrap();
             creat_project(&name);
         }
-        Some(("test_toml", _)) => {
+        Some(("build", _)) => {
+            build_with_Goofy_toml_file();
+        }
+        Some(("run", _)) => {
             run_with_Goofy_toml_file();
         }
         _ => {
@@ -241,7 +200,7 @@ fn create_target_release_dir() {
     }
 }
 
-fn run_with_Goofy_toml_file() {
+fn build_with_Goofy_toml_file() {
     match fs::read_to_string("Goofy.toml") {
         Ok(toml_str) => match toml::from_str(&toml_str) {
             Ok(Goofy_toml) => {
@@ -251,7 +210,8 @@ fn run_with_Goofy_toml_file() {
                 create_target_release_dir();
                 let target_path = format!("target/release/{}", Goofy_toml.package.name);
                 compile("src/main.qmm", &*target_path);
-                run(&*target_path);
+                println!("{}{}", "Build Finished: ".green(), target_path);
+                println!("{}{}", "Run the project with: ", "Goofy run".green());
             }
             Err(e) => {
                 println!(
@@ -281,11 +241,61 @@ fn run_with_Goofy_toml_file() {
     }
 }
 
+fn run_with_Goofy_toml_file() {
+    match fs::read_to_string("Goofy.toml") {
+        Ok(toml_str) => match toml::from_str(&toml_str) {
+            Ok(Goofy_toml) => {
+                let Goofy_toml: GoofyToml = Goofy_toml;
+                println!("Package Name: {}", Goofy_toml.package.name);
+                println!("Package Version: {}", Goofy_toml.package.version);
+                create_target_release_dir();
+                let target_path = format!("target/release/{}", Goofy_toml.package.name);
+                compile("src/main.qmm", &*target_path);
+                run_project(&Goofy_toml.package.name, &target_path)
+            }
+            Err(e) => {
+                println!(
+                    "{}",
+                    format!(
+                        "{}:\n{} {} {} {} {} {} {} {} {}",
+                        "Goofy.toml broken".red(),
+                        "make sure your",
+                        "Goofy.toml".green(),
+                        "contains a",
+                        "[package]".green(),
+                        "label and it has a",
+                        "name".green(),
+                        "item and a",
+                        "version".green(),
+                        "item",
+                    )
+                );
+            }
+        },
+        Err(_) => {
+            println!(
+                "{}",
+                format!("{}{}", "run failed: ".red(), "Goofy.toml not found")
+            );
+        }
+    }
+}
+
+fn run_project(project_name: &str, target_path: &str) {
+    let output = stdCommand::new(target_path)
+        .output()
+        .expect("Failed to execute command");
+    let exit_code = output.status.code().unwrap();
+
+    println!("\n[Finish Running {}, Exit status: {}]\n\n", project_name.green(), exit_code);
+}
+
 fn run(target_file_name: &str) {
     let output = stdCommand::new(target_file_name)
         .output()
         .expect("Failed to execute command");
     let exit_code = output.status.code().unwrap();
 
-    println!("\nExit Code of {}: {}\n\n", target_file_name, exit_code);
+    println!("\n[Finish Running {}, Exit status: {}]\n\n", target_file_name.green(), exit_code);
 }
+
