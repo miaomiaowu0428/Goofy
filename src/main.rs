@@ -66,7 +66,7 @@ fn main() {
             run_with_Goofy_toml_file();
         }
         _ => {
-            command.print_help();
+            command.print_long_help();
         }
     }
 }
