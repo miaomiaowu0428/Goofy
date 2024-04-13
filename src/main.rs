@@ -1,15 +1,16 @@
 #![allow(unused)]
 #![allow(non_snake_case)]
 
+use crate::Goofy_toml::{DependencyInfo, GoofyToml};
+use clap::{arg, Command as clapCommand, Parser as clapParser};
+use colored::Colorize;
+use inkwell::context::Context;
+use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command as stdCommand;
-use clap::{arg, Command as clapCommand, Parser as clapParser};
-use colored::Colorize;
-use inkwell::context::Context;
-use crate::Goofy_toml::GoofyToml;
 use Qmmc;
 use Qmmc::analyze::lex::Lexer;
 use Qmmc::analyze::parse::Parser;
@@ -142,12 +143,7 @@ fn compile(source_file_name: &str, res_file_name: &str) {
 
             let clang_source = format!("{}{}", res_file_name, ".s");
 
-            if llc_output.status.success() {
-                println!(
-                    "{}",
-                    format!("{:<26}: {}", "successfully compiled to", clang_source).green()
-                );
-            } else {
+            if !(llc_output.status.success()) {
                 eprintln!(
                     "llc command failed: {}",
                     String::from_utf8_lossy(&llc_output.stderr)
@@ -161,28 +157,23 @@ fn compile(source_file_name: &str, res_file_name: &str) {
                 .output()
                 .expect("Failed to execute clang command");
 
-            if clang_output.status.success() {
-                println!(
-                    "{}",
-                    format!("{:<26}: {}", "successfully compiled to", res_file_name).green()
-                );
-            } else {
+            if !(clang_output.status.success()) {
                 eprintln!(
                     "clang command failed: {}",
                     String::from_utf8_lossy(&clang_output.stderr)
                 );
             }
 
-            if clang_output.status.success() {
+            if !(clang_output.status.success()) {
+                println!("Failed to compile to {}", res_file_name);
+                return;
+            } else {
                 if let Err(e) = fs::remove_file(&llc_source) {
                     eprintln!("Error removing file {}: {}", llc_source, e);
                 }
                 if let Err(e) = fs::remove_file(&clang_source) {
                     eprintln!("Error removing file {}: {}", clang_source, e);
                 }
-            } else {
-                println!("Failed to compile to {}", res_file_name);
-                return;
             }
         }
     }
@@ -205,8 +196,11 @@ fn build_with_Goofy_toml_file() {
         Ok(toml_str) => match toml::from_str(&toml_str) {
             Ok(Goofy_toml) => {
                 let Goofy_toml: GoofyToml = Goofy_toml;
-                println!("Package Name: {}", Goofy_toml.package.name);
-                println!("Package Version: {}", Goofy_toml.package.version);
+                println!("Building project: {}", Goofy_toml.package.name.green());
+                println!("Project Version: {}", Goofy_toml.package.version.green());
+
+                print_dependencies_if_not_empty(Goofy_toml.dependencies);
+
                 create_target_release_dir();
                 let target_path = format!("target/release/{}", Goofy_toml.package.name);
                 compile("src/main.qmm", &*target_path);
@@ -214,22 +208,7 @@ fn build_with_Goofy_toml_file() {
                 println!("{}{}", "Run the project with: ", "Goofy run".green());
             }
             Err(e) => {
-                println!(
-                    "{}",
-                    format!(
-                        "{}:\n{} {} {} {} {} {} {} {} {}",
-                        "Goofy.toml broken".red(),
-                        "make sure your",
-                        "Goofy.toml".green(),
-                        "contains a",
-                        "[package]".green(),
-                        "label and it has a",
-                        "name".green(),
-                        "item and a",
-                        "version".green(),
-                        "item",
-                    )
-                );
+                println!("{}", format!("{}:\n{}", "Goofy.toml broken".red(), e,));
             }
         },
         Err(_) => {
@@ -241,13 +220,33 @@ fn build_with_Goofy_toml_file() {
     }
 }
 
+fn print_dependencies_if_not_empty(dependencies: Option<HashMap<String, DependencyInfo>>) {
+    if let Some(dependencies) = dependencies {
+        if dependencies.is_empty() == false {
+            println!("\n{}", "Dependencies:");
+            for (name, info) in dependencies {
+                let info = match info {
+                    DependencyInfo::simple(version) => {
+                        format!("{} = {}", name.green(), version.green())
+                    }
+                    DependencyInfo::details(details) => {
+                        format!("{} = {}", name.green(), details.version.green())
+                    }
+                };
+                println!("{}\n", info);
+            }
+            todo!("{}", "dependency download and build".red())
+        }
+    }
+}
+
 fn run_with_Goofy_toml_file() {
     match fs::read_to_string("Goofy.toml") {
         Ok(toml_str) => match toml::from_str(&toml_str) {
             Ok(Goofy_toml) => {
                 let Goofy_toml: GoofyToml = Goofy_toml;
-                println!("Package Name: {}", Goofy_toml.package.name);
-                println!("Package Version: {}", Goofy_toml.package.version);
+                println!("Running project: {}", Goofy_toml.package.name.green());
+                println!("Project Version: {}", Goofy_toml.package.version.green());
                 create_target_release_dir();
                 let target_path = format!("target/release/{}", Goofy_toml.package.name);
                 compile("src/main.qmm", &*target_path);
@@ -287,15 +286,9 @@ fn run_project(project_name: &str, target_path: &str) {
         .expect("Failed to execute command");
     let exit_code = output.status.code().unwrap();
 
-    println!("\n[Finish Running {}, Exit status: {}]\n\n", project_name.green(), exit_code);
+    println!(
+        "\n[Finish Running {}, Exit status: {}]\n\n",
+        project_name.green(),
+        exit_code.to_string().green()
+    );
 }
-
-fn run(target_file_name: &str) {
-    let output = stdCommand::new(target_file_name)
-        .output()
-        .expect("Failed to execute command");
-    let exit_code = output.status.code().unwrap();
-
-    println!("\n[Finish Running {}, Exit status: {}]\n\n", target_file_name.green(), exit_code);
-}
-
