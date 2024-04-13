@@ -24,7 +24,7 @@ static INTRODUCTION: &str =
     to use Goofy, you need to make sure that you have installed the LLVM and Clang on your machine.";
 
 fn main() {
-    let matches = clapCommand::new("Goofy")
+    let mut command = clapCommand::new("Goofy")
         .version("version 0.0.1b")
         .author("Qmm")
         .about(INTRODUCTION)
@@ -51,8 +51,8 @@ fn main() {
                 .author("Qmm")
                 .about("Build project with Goofy.toml file")
                 .long_about("Build project with Goofy.toml file"),
-        ])
-        .get_matches();
+        ]);
+    let matches = command.clone().get_matches();
 
     match matches.subcommand() {
         Some(("new", new_command)) => {
@@ -66,7 +66,7 @@ fn main() {
             run_with_Goofy_toml_file();
         }
         _ => {
-            println!("No subcommand provided");
+            command.print_help();
         }
     }
 }
@@ -208,7 +208,7 @@ fn build_with_Goofy_toml_file() {
                 println!("{}{}", "Run the project with: ", "Goofy run".green());
             }
             Err(e) => {
-                println!("{}", format!("{}:\n{}", "Goofy.toml broken".red(), e,));
+                println!("{}", format!("{}:\n{}", "Goofy.toml broken".red(), e, ));
             }
         },
         Err(_) => {
