@@ -19,7 +19,7 @@ cargo build --release
 现在在任意目录使用`Goofy --version`验证安装成功 或者 `Goofy --help`查看帮助信息.
 
 ## 使用
-开始使用Goofy之前, 你需要确保你的环境中已经包含了llvm和clang.
+开始使用Goofy之前, 你需要确保你的环境中已经包含了`llvm`和`clang`.
 
 Goofy提供了一些子命令来帮助你管理你的项目: 
 
