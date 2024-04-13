@@ -8,7 +8,7 @@ Goofy是一个为Qmm-lang编程语言设计的包管理和构建工具.
 - LLVM10  
 
 进入项目目录, 使用
-`bash
+`
 cargo build --release
 `构建Goofy.  
 构建完成后, 你可以在`target/release`目录下找到Goofy的可执行文件. 
